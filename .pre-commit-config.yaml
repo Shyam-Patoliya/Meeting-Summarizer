@@ -47,7 +47,8 @@ repos:
     rev: 0.5.26
     hooks:
     -   id: uv-export
-        args: ["--frozen", "--no-hashes", "--no-emit-project"]
+        args: ["--frozen", "--no-hashes", "--no-emit-project", "--output-file=requirements.txt"]
+    -   id: uv-sync
 
 # -   repo: https://github.com/pre-commit/mirrors-mypy
 #     rev: v1.14.0
