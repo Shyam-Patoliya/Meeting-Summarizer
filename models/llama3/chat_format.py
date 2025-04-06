@@ -1,10 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
-
 import io
 import uuid
 from dataclasses import dataclass
@@ -256,15 +249,10 @@ def create_vision_mask(
         return []
 
     if len(vision_token_locations) == 1:
-        # only one image present, unmask until end of sequence
         return [[vision_token_locations[0], -1]]
     vision_masks = [[loc1, loc2] for loc1, loc2 in zip(vision_token_locations[:-1], vision_token_locations[1:])]
-    # last image will attend to all subsequent text
     vision_masks.append([vision_token_locations[-1], len(tokens)])
 
-    # if there are two or more consecutive vision tokens,
-    # they should all attend to all subsequent
-    # text present
     last_mask_end = vision_masks[-1][1]
     for vision_mask in vision_masks[::-1]:
         if vision_mask[0] == vision_mask[1] - 1:
