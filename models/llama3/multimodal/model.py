@@ -1,13 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
-
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
-
 import logging
 import math
 from functools import partial
@@ -57,7 +47,6 @@ def gather_from_tensor_model_parallel_region(input_):
     """Gather tensors and concatenate along the last dimension."""
 
     world_size = fs_init.get_model_parallel_world_size()
-    # Size and dimension.
     last_dim = input_.dim() - 1
     rank = fs_init.get_model_parallel_rank()
 
@@ -76,18 +65,9 @@ def _get_full_row_masked_out_mask(
     attn_bias,
     negative_inf_value,
 ):
-    """
-    attn_bias should be a 4D tensor of shape [B, H, S1, S2]
-    where B is the batch size, H is the number of heads,
-    and S1/S2 are the sequence lengths. This returns
-    a 4D tensor of shape [B, H, S1, 1] which stores boolean
-    values which are 0 if the a full row in the last dimension
-    contains negative infinity values, otherwise it's 1.
-    """
+
     return (attn_bias != negative_inf_value).any(dim=-1).type_as(attn_bias)[..., None]
 
-
-# Image encoder for inference
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
 
@@ -97,17 +77,6 @@ class LayerNorm(nn.LayerNorm):
 
 
 class ColumnParallelConv2dPatch(torch.nn.Module):
-    """Conv2D Patching layer with model parallelism.
-    Column parallel over unfolded input.
-    Arguments:
-        in_channels: Input channels.
-        out_channels: Output channels.
-        kernel_size: Size of convolution kernel.
-        stride (default 1): Stride for convolution.
-        bias (default False): Use bias in Conv2d.
-    Input: (bsz, in_channels, width, height)
-    Output: (bsz, num_tokens, out_channels)
-    """
 
     def __init__(
         self,
@@ -515,26 +484,9 @@ class VisionEncoder(nn.Module):
 
 
 class Attention(nn.Module):
-    """Multi-head attention module."""
 
     def __init__(self, args: ModelArgs):
-        """
-        Initialize the Attention module.
-        Args:
-            args (ModelArgs): Model configuration parameters.
-        Attributes:
-            n_kv_heads (int): Number of key and value heads.
-            n_local_heads (int): Number of local query heads.
-            n_local_kv_heads (int): Number of local key and value heads.
-            n_rep (int): Number of repetitions for local heads.
-            head_dim (int): Dimension size of each attention head.
-            wq (ColumnParallelLinear): Linear transformation for queries.
-            wk (ColumnParallelLinear): Linear transformation for keys.
-            wv (ColumnParallelLinear): Linear transformation for values.
-            wo (RowParallelLinear): Linear transformation for output.
-            cache_k (torch.Tensor): Cached keys for attention.
-            cache_v (torch.Tensor): Cached values for attention.
-        """
+    
         super().__init__()
         world_size = fs_init.get_model_parallel_world_size()
         replication_factor = 1
@@ -627,7 +579,6 @@ class Attention(nn.Module):
         self.key_cache[:bs, position_ids, ...] = xk
         self.value_cache[:bs, position_ids, ...] = xv
 
-        # TODO: we can avoid slicing on first dimension by always padding to max_batch_size()
         xk = self.key_cache[:bs, ...]
         xv = self.value_cache[:bs, ...]
 
@@ -653,18 +604,6 @@ class FeedForward(nn.Module):
         multiple_of: int,
         ffn_dim_multiplier: Optional[float],
     ):
-        """
-        Initialize the FeedForward module.
-        Args:
-            dim (int): Input dimension.
-            hidden_dim (int): Hidden dimension of the feedforward layer.
-            multiple_of (int): Value to ensure hidden dimension is a multiple of this value.
-            ffn_dim_multiplier (float, optional): Custom multiplier for hidden dimension. Defaults to None.
-        Attributes:
-            w1 (ColumnParallelLinear): Linear transformation for the first layer.
-            w2 (RowParallelLinear): Linear transformation for the second layer.
-            w3 (ColumnParallelLinear): Linear transformation for the third layer.
-        """
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
         # custom dim factor multiplier
@@ -687,21 +626,7 @@ class FeedForward(nn.Module):
 
 class TransformerBlock(nn.Module):
     def __init__(self, layer_id: int, args: ModelArgs):
-        """
-        Initialize a TransformerBlock.
-        Args:
-            layer_id (int): Identifier for the layer.
-            args (ModelArgs): Model configuration parameters.
-        Attributes:
-            n_heads (int): Number of attention heads.
-            dim (int): Dimension size of the model.
-            head_dim (int): Dimension size of each attention head.
-            attention (Attention): Attention module.
-            feed_forward (FeedForward): FeedForward module.
-            layer_id (int): Identifier for the layer.
-            attention_norm (RMSNorm): Layer normalization for attention output.
-            ffn_norm (RMSNorm): Layer normalization for feedforward output.
-        """
+
         super().__init__()
         self.n_heads = args.n_heads
         self.dim = args.dim
@@ -727,16 +652,7 @@ class TransformerBlock(nn.Module):
         mask: torch.Tensor,
         position_ids: torch.LongTensor,
     ) -> torch.Tensor:
-        """
-        Perform a forward pass through the TransformerBlock.
-        Args:
-            x (torch.Tensor): Input tensor.
-            start_pos (int): Starting position for attention caching.
-            freqs_cis (torch.Tensor): Precomputed cosine and sine frequencies.
-            mask (torch.Tensor, optional): Masking tensor for attention. Defaults to None.
-        Returns:
-            torch.Tensor: Output tensor after applying attention and feedforward layers.
-        """
+        
         h = self.attention.forward(
             x=self.attention_norm(x),
             freqs_cis=freqs_cis,
@@ -775,14 +691,11 @@ class TilePositionEmbedding(nn.Module):
         unexpected_keys,
         error_msgs,
     ):
-        # load the weights from the checkpoint
         embed = state_dict.get(prefix + "embedding")
         if embed is not None:
-            # reshape the weights to the correct shape
             nt_old, nt_old, _, w = embed.shape
             logging.info(f"Resizing tile embedding from {nt_old}x{nt_old} to {self.num_tiles}x{self.num_tiles}")
             embed_new = TilePositionEmbedding._dynamic_resize(embed, self.num_tiles)
-            # assign the weights to the module
             state_dict[prefix + "embedding"] = embed_new
 
     @staticmethod
@@ -796,7 +709,6 @@ class TilePositionEmbedding(nn.Module):
             mode="bilinear",
             align_corners=True,
         )
-        # reshape the weights to the correct shape
         embed_new = embed_new.permute(2, 3, 0, 1)
         return embed_new
 
@@ -883,11 +795,6 @@ class CrossAttention(torch.nn.Module):
             eps=norm_eps,
         )
 
-        # cross-attention heads are model parallel similar to
-        # self-attention, and we also use the identical KV head
-        # combination to ensure parity with the corresponding
-        # trunk LLM (i.e., group query attention) -- @dubeya
-        # local heads
         assert self.n_heads % self.n_kv_heads == 0
         assert self.n_heads % self.world_size == 0
         assert self.n_kv_heads % self.world_size == 0
@@ -907,7 +814,6 @@ class CrossAttention(torch.nn.Module):
 
         xk, xv = [tensor.transpose(1, 2) for tensor in (xk, xv)]
 
-        # repeat k/v heads if n_kv_heads < n_heads
         xk = xk.repeat_interleave(self.n_rep, dim=1)
         xv = xv.repeat_interleave(self.n_rep, dim=1)
 
@@ -1061,9 +967,6 @@ class CrossAttentionTransformerVision(torch.nn.Module):
         )
 
     def forward(self, images: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
-        # vision_tokens: (B, T, D)
-        # aspect_ratios: (B, T)
-        # h: (B, T, D)
         vision_tokens = self.vision_encoder(images.to(dtype=torch.get_default_dtype()), aspect_ratios)
 
         vision_tokens = F.linear(vision_tokens, self.vision_projection.weight, self.vision_projection.bias)
@@ -1122,7 +1025,6 @@ class CrossAttentionTransformerText(torch.nn.Module):
                 )
                 self.cross_attention_layers.append(block)
 
-        # add xattn and dummy layers to avoid conditionals in forward()
         self.text_and_xattn_layers = []
 
         for idx, layer in enumerate(self.layers):
