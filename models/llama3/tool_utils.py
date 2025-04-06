@@ -1,9 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
 import ast
 import json
 import re
@@ -18,7 +12,6 @@ CUSTOM_TOOL_CALL_PATTERN = re.compile(r"<function=(?P<function_name>[^}]+)>(?P<a
 def is_json(s):
     try:
         parsed = json.loads(s)
-        # Return True for valid objects and not for ints, strings, etc
         return isinstance(parsed, dict)
     except json.JSONDecodeError:
         return False
@@ -114,12 +107,6 @@ class ToolUtils:
 
     @staticmethod
     def maybe_extract_custom_tool_call(message_body: str) -> Optional[Tuple[str, str]]:
-        # NOTE: Custom function too calls are still experimental
-        # Sometimes, response is of the form
-        # {"type": "function", "name": "function_name", "parameters": {...}
-        # and some times
-        # <function=function_name>(parameters)</function>
-
         # Find the first match in the text
         match = re.search(CUSTOM_TOOL_CALL_PATTERN, message_body)
         if match:
