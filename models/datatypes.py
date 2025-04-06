@@ -1,25 +1,9 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
-
 import base64
 from enum import Enum
-
 from io import BytesIO
 from typing import Dict, List, Literal, Optional, Union
-
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
-
 from typing_extensions import Annotated
-
-
-# The goal is that these set of types are relevant for all Llama models.
-# That isn't the current state yet -- e.g., BuiltinTool is somewhat specific to
-# the llama3 series of models.
-
 
 class Role(Enum):
     system = "system"
