@@ -58,16 +58,7 @@ def int4_row_quantize(
     x: torch.Tensor,
     group_size: int = 128,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Helper function to quantize a tensor to int4 with groupwise scales.
-
-    Args:
-        x (Tensor): [N, K] Higher precision weight tensor to quantize.
-        group_size (int): Number of elements to calculate group scale for.
-    Returns:
-        wq (Tensor): [N, K // 2] Quantized int4 tensor stored in int8 elements.
-        group_scale (Tensor): [K / group_size, N] FP32 Scale per group.
-    """
+   
     n_bit = 4 
     to_quant = x.reshape(-1, group_size).to(torch.float)
 
@@ -139,12 +130,7 @@ def quantize_fp8(
     fp8_activation_scale_ub: float,
     output_device: Optional[torch.device] = None,
 ) -> Fp8RowwiseWeights:
-    """Quantize [n, k] weight tensor.
-
-    Args:
-        w (Tensor): [n, k] input high precision tensor to quantize.
-        fp8_activation_scale_ub (float): Upper bound for activation max.
-    """
+    
     activation_scale_ub = torch.tensor(
         [fp8_activation_scale_ub],
         dtype=torch.float,
@@ -192,12 +178,7 @@ def load_fp8(
     fp8_activation_scale_ub: float,
     output_device: Optional[torch.device] = None,
 ) -> Fp8RowwiseWeights:
-    """Load FP8 [n, k] weight tensor.
-
-    Args:
-        w (Tensor): [n, k] input FP8.
-        fp8_activation_scale_ub (float): Upper bound for activation max.
-    """
+  
     activation_scale_ub = torch.tensor(
         [fp8_activation_scale_ub],
         dtype=torch.float,
@@ -217,13 +198,7 @@ def load_int4(
     scale: Tensor,
     output_device: Optional[torch.device] = None,
 ) -> Int4Weights:
-    """Load INT4 [n, k/2] weight tensor.
-
-    Args:
-        w (Tensor): [n, k/2] input INT4.
-        w_scale (Tensor): [n, k/2] input INT4 scale.
-    """
-    return Int4Weights(
+  Int4Weights(
         weight=w.to(torch.int8).to(device=output_device),
         scale=scale.to(device=output_device),
         shape=w.shape,
@@ -237,9 +212,7 @@ def fc_dynamic(
     num_tokens: Optional[Tensor] = None,
     is_memory_bounded: bool = False,
 ) -> Tensor:
-    """
-    Single w8a8 fc layer with dynamic row-wise scaling, or w4a16 fc layer with dyanmic row-wise scaling
-    """
+  
     if isinstance(w, Int4Weights):
         y = torch.ops.fbgemm.bf16i4bf16_rowwise(x, w.weight, w.scale, torch.zeros_like(w.scale))
     else:
