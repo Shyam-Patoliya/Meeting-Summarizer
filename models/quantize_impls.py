@@ -1,10 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
-
 import collections
 import logging
 from typing import Optional, Tuple, Type, Union
@@ -12,7 +5,7 @@ from typing import Optional, Tuple, Type, Union
 log = logging.getLogger(__name__)
 
 try:
-    import fbgemm_gpu.experimental.gen_ai  # noqa: F401
+    import fbgemm_gpu.experimental.gen_ai
 
     log.info("Using efficient FP8 or INT4 operators in FBGEMM.")
 except ImportError:
@@ -24,8 +17,6 @@ from torch import nn, Tensor
 
 
 class Fp8ScaledWeights:
-    # TODO: Ugly trick so torch allows us to replace parameters
-    # with our custom Fp8Weights instance. Do this properly.
     @property
     def __class__(self) -> Type[nn.parameter.Parameter]:
         return nn.Parameter
@@ -34,9 +25,6 @@ class Fp8ScaledWeights:
     def grad_fn(self) -> None:
         return None
 
-
-# pyre-fixme[4]: Attribute annotation cannot be `Any`.
-# pyre-fixme[2]: Parameter annotation cannot be `Any`.
 class Fp8RowwiseWeights(
     Fp8ScaledWeights,
     collections.namedtuple(
@@ -48,8 +36,6 @@ class Fp8RowwiseWeights(
 
 
 class Int4ScaledWeights:
-    # TODO: Ugly trick so torch allows us to replace parameters
-    # with our custom Int4Weights instance. Do this properly.
     @property
     def __class__(self) -> Type[nn.parameter.Parameter]:
         return nn.Parameter
@@ -58,9 +44,6 @@ class Int4ScaledWeights:
     def grad_fn(self) -> None:
         return None
 
-
-# pyre-fixme[4]: Attribute annotation cannot be `Any`.
-# pyre-fixme[2]: Parameter annotation cannot be `Any`.
 class Int4Weights(
     Int4ScaledWeights,
     collections.namedtuple(
@@ -85,7 +68,7 @@ def int4_row_quantize(
         wq (Tensor): [N, K // 2] Quantized int4 tensor stored in int8 elements.
         group_scale (Tensor): [K / group_size, N] FP32 Scale per group.
     """
-    n_bit = 4  # Number of target bits.
+    n_bit = 4 
     to_quant = x.reshape(-1, group_size).to(torch.float)
 
     max_val = torch.abs(to_quant).amax(dim=1, keepdim=True)
@@ -95,28 +78,19 @@ def int4_row_quantize(
 
     out = to_quant.div(scales).round().clamp_(min_int, max_int - 1)
 
-    # Cast to int8 and restore shape.
     out = out.to(dtype=torch.int8).reshape(x.shape)
-
-    # Scales should be in [num_groups, N] layout.
     scales = scales.view(x.shape[0], -1).t().contiguous()
 
     return out, scales
 
 
 def pack_int4(x: torch.Tensor) -> torch.Tensor:
-    # Given int8 x, pack adjacent int4 values into a single int8.
     low_x = x[:, ::2]
     high_x = x[:, 1::2]
-
-    # High bits need to left shift, this also masks off extra bits.
     high_x = torch.bitwise_left_shift(high_x, 4)
-    # Low bits need to have sign bits removed.
     low_x = torch.bitwise_and(low_x, 0xF)
 
-    # Recombine into a single value with bitwise or.
     return torch.bitwise_or(low_x, high_x).contiguous()
-
 
 def bmm_nt(
     x: Tensor,
@@ -286,12 +260,12 @@ def ffn_swiglu_dynamic(
 ) -> Tensor:
     assert x.dim() == 3 or x.dim() == 2
     if x.dim() == 3:
-        (B, T, D) = x.shape  # noqa: N806
+        (B, T, D) = x.shape
     else:
-        (T, D) = x.shape  # noqa: N806
-        B = 1  # noqa: N806
+        (T, D) = x.shape
+        B = 1
 
-    HD_L = w1.shape[0]  # noqa: N806
+    HD_L = w1.shape[0]
     assert HD_L == w3.shape[0]
     x1 = fc_dynamic(
         x.view(B * T, D),
